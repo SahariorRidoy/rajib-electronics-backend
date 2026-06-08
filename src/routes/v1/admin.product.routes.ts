@@ -6,7 +6,8 @@ import requireAdmin from "../../middlewares/auth.js";
 import { dbConnect } from "../../db/connection.js";
 import { Product, ProductDoc } from "../../models/Product.js";
 import { Manufacturer } from "../../models/Manufacturer.js";
-import { cloudinary } from "../../lib/cloudinary.js";
+import fs from "fs";
+import path from "path";
 
 
 const router = Router();
@@ -35,7 +36,7 @@ const VariantDTO = z.object({
   compareAtPrice: z.number().nonnegative().optional(),
   stock: z.number().int().nonnegative().optional(),
   image: z.string().url().optional(),
-  imageId: z.string().optional(), // Cloudinary public_id
+  imageId: z.string().optional(), // relative file path e.g. /uploads/variants/uuid.webp
 });
 
 const AdminCreateProductDTO = z.object({
@@ -302,13 +303,20 @@ router.delete("/products/:id", requireAdmin, async (req, res, next) => {
     const out = await Product.findByIdAndDelete(id).lean<LeanProduct | null>();
     if (!out) return res.status(404).json({ ok: false, code: "NOT_FOUND" });
 
-    // Delete color variant + variant images from Cloudinary
-    const imageIdsToDelete = [
+    // Delete color variant + variant images from disk
+    const filePathsToDelete = [
       ...((out as any).colorVariants ?? []).map((v: any) => v.imageId),
       ...((out as any).variants ?? []).map((v: any) => v.imageId),
-    ].filter(Boolean);
-    if (imageIdsToDelete.length > 0) {
-      await cloudinary.api.delete_resources(imageIdsToDelete).catch(() => {});
+      ...((out as any).images ?? []).map((url: string) => {
+        try { return new URL(url).pathname; } catch { return null; }
+      }),
+    ].filter(Boolean) as string[];
+
+    for (const filePath of filePathsToDelete) {
+      try {
+        const abs = path.join(process.cwd(), filePath);
+        if (fs.existsSync(abs)) fs.unlinkSync(abs);
+      } catch { /* ignore */ }
     }
 
     return res.json({ ok: true, data: { id } });

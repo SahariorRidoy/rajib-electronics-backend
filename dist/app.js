@@ -4,6 +4,8 @@ import cors from "cors";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import bodyParser from "body-parser";
+import path from "path";
+import { fileURLToPath } from "url";
 import products from "./routes/v1/product.routes.js";
 // import orders from "./routes/v1/order.routes.js";
 import health from "./routes/v1/health.routes.js";
@@ -93,6 +95,16 @@ if (process.env.NODE_ENV === "production") {
     app.use(limiter);
 }
 app.use(bodyParser.json({ limit: "1mb" }));
+// Serve uploaded images as static files with CORS headers
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadsPath = path.resolve(process.cwd(), "uploads");
+app.use("/uploads", (req, res, next) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type");
+    res.set("Cross-Origin-Resource-Policy", "cross-origin");
+    next();
+}, express.static(uploadsPath));
 //  Routes
 app.get("/", (req, res) => {
     res.json({

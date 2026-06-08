@@ -41,6 +41,16 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# uploads — keep folder structure, ignore actual files
+uploads/**/*
+!uploads/.gitkeep
+!uploads/products/.gitkeep
+!uploads/variants/.gitkeep
+!uploads/banners/.gitkeep
+!uploads/categories/.gitkeep
+!uploads/manufacturers/.gitkeep
+!uploads/logos/.gitkeep
+
 .env
 .env.local
 .env.production
