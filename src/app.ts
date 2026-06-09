@@ -72,29 +72,13 @@ const corsOptions = {
     "X-Request-Id",
   ],
   exposedHeaders: ["X-Request-Id", "Content-Length"],
-  credentials: false,
+  credentials: true,
   preflightContinue: false,
   optionsSuccessStatus: 204,
 };
 
+app.options("*", cors(corsOptions));
 app.use(cors(corsOptions));
-
-// Defensive explicit options handler — ensures the exact headers on preflight
-app.options("*", (req, res) => {
-  const origin = req.get("Origin");
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET,POST,PUT,PATCH,DELETE,OPTIONS"
-  );
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Accept, Authorization, X-Requested-With, X-Idempotency-Key, X-Request-Id"
-  );
-  return res.status(204).end();
-});
 
 
 app.use(helmet());
