@@ -8,7 +8,7 @@ export const env = {
   MONGODB_DB: process.env.MONGODB_DB ?? "RajibElectronics",
   CORS_ORIGINS:
     process.env.CORS_ORIGINS ||
-    "http://localhost:3000,http://localhost:3001,https://rajib-electornics-admin.vercel.app,https://rajibelectornics.com,https://www.rajibelectornics.com,https://admin.rajibelectornics.com,https://www.admin.rajibelectornics.com,https://rajib-electornics-frontend.vercel.app",
+    "http://localhost:3000,http://localhost:3001,https://rajibelectornics.com,https://www.rajibelectornics.com,https://admin.rajibelectornics.com,https://www.admin.rajibelectornics.com",
   JWT_SECRET:
     process.env.JWT_SECRET ?? "fallback-secret-key-change-in-production",
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? "7d",

@@ -65,7 +65,7 @@ const corsOptions = {
         "X-Request-Id",
     ],
     exposedHeaders: ["X-Request-Id", "Content-Length"],
-    credentials: true,
+    credentials: false,
     preflightContinue: false,
     optionsSuccessStatus: 204,
 };
@@ -78,7 +78,6 @@ app.options("*", (req, res) => {
     }
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, X-Requested-With, X-Idempotency-Key, X-Request-Id");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
     return res.status(204).end();
 });
 app.use(helmet());
