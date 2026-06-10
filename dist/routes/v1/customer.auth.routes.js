@@ -175,12 +175,7 @@ router.get("/customers/profile", requireCustomer, async (req, res, next) => {
 const UpdateProfileDTO = z.object({
     name: z.string().min(2).optional(),
     phone: z.string().optional(),
-    address: z.object({
-        houseOrVillage: z.string().optional(),
-        roadOrPostOffice: z.string().optional(),
-        blockOrThana: z.string().optional(),
-        district: z.string().optional(),
-    }).optional(),
+    address: z.string().optional(),
 });
 router.patch("/customers/profile", requireCustomer, async (req, res, next) => {
     try {

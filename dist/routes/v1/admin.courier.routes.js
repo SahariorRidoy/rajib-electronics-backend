@@ -26,19 +26,13 @@ router.post("/courier/steadfast/send/:orderId", async (req, res, next) => {
         if (order.courier?.consignmentId) {
             return res.status(400).json({ ok: false, code: "ALREADY_SENT", data: order.courier });
         }
-        const address = [
-            order.customer.houseOrVillage,
-            order.customer.roadOrPostOffice,
-            order.customer.blockOrThana,
-            order.customer.district,
-        ].filter(Boolean).join(", ");
         let result;
         try {
             result = await steadfastCreateConsignment({
                 invoice: `${order._id.toString()}-${Date.now()}`,
                 recipient_name: order.customer.name,
                 recipient_phone: order.customer.phone,
-                recipient_address: address || "N/A",
+                recipient_address: order.customer.address || "N/A",
                 cod_amount: order.totals.grandTotal,
                 note: order.notes,
             });
@@ -84,7 +78,7 @@ router.post("/courier/steadfast/bulk-send", async (req, res, next) => {
             invoice: o._id.toString(),
             recipient_name: o.customer.name,
             recipient_phone: o.customer.phone,
-            recipient_address: [o.customer.houseOrVillage, o.customer.roadOrPostOffice, o.customer.blockOrThana, o.customer.district].filter(Boolean).join(", ") || "N/A",
+            recipient_address: o.customer.address || "N/A",
             cod_amount: o.totals.grandTotal,
             note: o.notes,
         }));
@@ -334,13 +328,6 @@ router.post("/courier/pathao/send/:orderId", async (req, res, next) => {
             return res.status(400).json({ ok: false, code: "ALREADY_SENT", data: order.courier });
         }
         const body = PathaoSendSchema.parse(req.body);
-        const address = [
-            order.customer.houseOrVillage,
-            order.customer.roadOrPostOffice,
-            order.customer.blockOrThana,
-        ]
-            .filter(Boolean)
-            .join(", ");
         const result = await pathaoCreateOrder({
             store_id: body.store_id,
             recipient_city: body.recipient_city,
@@ -354,7 +341,7 @@ router.post("/courier/pathao/send/:orderId", async (req, res, next) => {
             merchant_order_id: order._id.toString(),
             recipient_name: order.customer.name,
             recipient_phone: order.customer.phone,
-            recipient_address: address || "N/A",
+            recipient_address: order.customer.address || "N/A",
             item_quantity: order.lines.reduce((s, l) => s + l.qty, 0),
             amount_to_collect: order.totals.grandTotal,
         });
@@ -413,13 +400,12 @@ router.post("/courier/pathao/bulk-send", async (req, res, next) => {
             return res.status(400).json({ ok: false, code: "NO_ELIGIBLE_ORDERS" });
         const bulkPayload = dbOrders.map((o) => {
             const p = orderPayloads.find((x) => x.orderId === o._id.toString());
-            const address = [o.customer.houseOrVillage, o.customer.roadOrPostOffice, o.customer.blockOrThana, o.customer.district].filter(Boolean).join(", ");
             return {
                 store_id: p.store_id,
                 merchant_order_id: o._id.toString(),
                 recipient_name: o.customer.name,
                 recipient_phone: o.customer.phone,
-                recipient_address: address || "N/A",
+                recipient_address: o.customer.address || "N/A",
                 delivery_type: p.delivery_type,
                 item_type: p.item_type,
                 item_weight: String(p.item_weight ?? 0.5),

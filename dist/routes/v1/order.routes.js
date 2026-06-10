@@ -116,12 +116,7 @@ router.post("/orders", async (req, res) => {
                         phone: customerPhone,
                         passwordHash: "AUTO_CREATED_NO_LOGIN",
                         isAutoCreated: true,
-                        address: {
-                            houseOrVillage: req.body.customer?.houseOrVillage,
-                            roadOrPostOffice: req.body.customer?.roadOrPostOffice,
-                            blockOrThana: req.body.customer?.blockOrThana,
-                            district: req.body.customer?.district,
-                        },
+                        address: req.body.customer?.address,
                     });
                 }
                 catch (err) {
@@ -132,12 +127,7 @@ router.post("/orders", async (req, res) => {
                         phone: customerPhone,
                         passwordHash: "AUTO_CREATED_NO_LOGIN",
                         isAutoCreated: true,
-                        address: {
-                            houseOrVillage: req.body.customer?.houseOrVillage,
-                            roadOrPostOffice: req.body.customer?.roadOrPostOffice,
-                            blockOrThana: req.body.customer?.blockOrThana,
-                            district: req.body.customer?.district,
-                        },
+                        address: req.body.customer?.address,
                     });
                 }
             }
@@ -147,10 +137,7 @@ router.post("/orders", async (req, res) => {
             customer: {
                 name: req.body.customer?.name ?? "Customer",
                 phone: req.body.customer?.phone ?? "",
-                houseOrVillage: req.body.customer?.houseOrVillage ?? "",
-                roadOrPostOffice: req.body.customer?.roadOrPostOffice ?? "",
-                blockOrThana: req.body.customer?.blockOrThana ?? "",
-                district: req.body.customer?.district ?? "",
+                address: req.body.customer?.address ?? "",
             },
             lines: normalized.map((n) => ({
                 productId: new mongoose.Types.ObjectId(n._id),

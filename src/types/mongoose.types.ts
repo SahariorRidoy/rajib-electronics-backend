@@ -16,11 +16,6 @@ export interface IOrder {
     phone: string;
     email?: string;
     address?: string;
-    area?: string;
-    houseOrVillage?: string;
-    roadOrPostOffice?: string;
-    blockOrThana?: string;
-    district?: string;
   };
   totals?: {
     subTotal: number;

@@ -9,12 +9,7 @@ export interface CustomerDoc extends mongoose.Document {
   isVerified: boolean;
   resetToken?: string;
   resetTokenExpiry?: Date;
-  address?: {
-    houseOrVillage?: string;
-    roadOrPostOffice?: string;
-    blockOrThana?: string;
-    district?: string;
-  };
+  address?: string;
   isAutoCreated?: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -29,12 +24,7 @@ const CustomerSchema = new Schema<CustomerDoc>(
     isVerified: { type: Boolean, default: true },
     resetToken: { type: String },
     resetTokenExpiry: { type: Date },
-    address: {
-      houseOrVillage: String,
-      roadOrPostOffice: String,
-      blockOrThana: String,
-      district: String,
-    },
+    address: { type: String },
     isAutoCreated: { type: Boolean, default: false },
   },
   { timestamps: true }

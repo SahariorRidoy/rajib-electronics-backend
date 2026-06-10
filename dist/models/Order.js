@@ -3,10 +3,7 @@ const OrderSchema = new Schema({
     customer: {
         name: { type: String, required: true },
         phone: { type: String, required: true },
-        houseOrVillage: { type: String, default: "" },
-        roadOrPostOffice: { type: String, default: "" },
-        blockOrThana: { type: String, default: "" },
-        district: { type: String, default: "" },
+        address: { type: String, default: "" },
     },
     lines: [
         {

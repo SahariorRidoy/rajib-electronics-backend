@@ -8,12 +8,7 @@ const CustomerSchema = new Schema({
     isVerified: { type: Boolean, default: true },
     resetToken: { type: String },
     resetTokenExpiry: { type: Date },
-    address: {
-        houseOrVillage: String,
-        roadOrPostOffice: String,
-        blockOrThana: String,
-        district: String,
-    },
+    address: { type: String },
     isAutoCreated: { type: Boolean, default: false },
 }, { timestamps: true });
 export const Customer = models.Customer ||
