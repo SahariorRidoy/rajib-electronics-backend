@@ -5,6 +5,7 @@ import { dbConnect } from "../../db/connection.js";
 import { Product } from "../../models/Product.js";
 import { Order } from "../../models/Order.js";
 import { Customer } from "../../models/Customer.js";
+import { OrderEditLog } from "../../models/OrderEditLog.js";
 import type { IOrderDocument } from "../../types/mongoose.types.js";
 
 const router = Router();
@@ -228,11 +229,14 @@ router.get("/orders", async (req, res) => {
     const filter: Record<string, any> = {};
     if (status) filter.status = status;
     if (search) {
-      filter.$or = [
-        { _id: { $regex: search, $options: "i" } },
+      const orConditions: Record<string, any>[] = [
         { "customer.name": { $regex: search, $options: "i" } },
         { "customer.phone": { $regex: search, $options: "i" } },
       ];
+      if (mongoose.Types.ObjectId.isValid(search)) {
+        orConditions.push({ _id: new mongoose.Types.ObjectId(search) });
+      }
+      filter.$or = orConditions;
     }
 
     // Add date filtering
@@ -322,7 +326,118 @@ router.get("/debug/recent-orders", async (req, res) => {
   }
 });
 
-/* order status update, delete, get by id - keep as in your current code (if already present) */
+/** PATCH /orders/:id/lines — admin edits item quantities or removes items */
+router.patch("/orders/:id/lines", async (req, res) => {
+  try {
+    await dbConnect();
+    const { id } = req.params;
+    const { lines } = req.body;
+
+    if (!Array.isArray(lines) || lines.length === 0) {
+      return res.status(400).json({ ok: false, message: "Lines array required and cannot be empty" });
+    }
+
+    const order = await (Order as any).findById(id).lean();
+    if (!order) return res.status(404).json({ ok: false, message: "Order not found" });
+
+    if (["DELIVERED", "CANCELLED", "RETURNED"].includes(order.status)) {
+      return res.status(400).json({ ok: false, message: "Cannot edit items on a completed order" });
+    }
+
+    // Adjust stock based on qty diff between old and new lines
+    for (const oldLine of order.lines) {
+      const newLine = lines.find((l: any) => String(l.productId) === String(oldLine.productId));
+      const oldQty = Number(oldLine.qty);
+      const newQty = newLine ? Math.max(1, Number(newLine.qty)) : 0;
+      const diff = oldQty - newQty; // positive → return stock, negative → deduct stock
+      if (diff !== 0) {
+        await Product.findByIdAndUpdate(oldLine.productId, { $inc: { stock: diff } });
+      }
+    }
+
+    // Recalculate totals
+    const subTotal = lines.reduce((sum: number, l: any) => sum + (Number(l.price) * Math.max(1, Number(l.qty))), 0);
+    const shipping = order.totals?.shipping ?? 0;
+    const grandTotal = subTotal + shipping;
+
+    const updatedLines = lines.map((l: any) => ({
+      productId: new mongoose.Types.ObjectId(String(l.productId)),
+      qty: Math.max(1, Number(l.qty)),
+      title: l.title ?? "",
+      price: Number(l.price) ?? 0,
+      image: l.image ?? "",
+      color: l.color ?? "",
+    }));
+
+    const updated = await (Order as any).findByIdAndUpdate(
+      id,
+      { lines: updatedLines, "totals.subTotal": subTotal, "totals.grandTotal": grandTotal },
+      { new: true }
+    ).lean();
+
+    // Write audit log — separate collection, never read by customer app
+    await OrderEditLog.create({
+      orderId: order._id,
+      before: {
+        lines: order.lines.map((l: any) => ({
+          productId: String(l.productId),
+          qty: l.qty,
+          title: l.title,
+          price: l.price,
+          image: l.image ?? "",
+          color: l.color ?? "",
+        })),
+        totals: order.totals,
+      },
+      after: {
+        lines: lines.map((l: any) => ({
+          productId: String(l.productId),
+          qty: Math.max(1, Number(l.qty)),
+          title: l.title ?? "",
+          price: Number(l.price) ?? 0,
+          image: l.image ?? "",
+          color: l.color ?? "",
+        })),
+        totals: { subTotal, shipping, grandTotal },
+      },
+    });
+
+    const formatted = {
+      ...updated,
+      _id: String(updated._id),
+      lines: updated.lines.map((l: any) => ({ ...l, productId: String(l.productId) })),
+    };
+
+    return res.json({ ok: true, data: formatted });
+  } catch (err) {
+    console.error("PATCH /orders/:id/lines error:", err);
+    return res.status(500).json({ ok: false, message: "Server error", error: String(err) });
+  }
+});
+
+/** GET /orders/:id/history — admin audit log for line edits */
+router.get("/orders/:id/history", async (req, res) => {
+  try {
+    await dbConnect();
+    const { id } = req.params;
+    const logs = await (OrderEditLog as any)
+      .find({ orderId: id })
+      .sort({ createdAt: -1 })
+      .lean();
+    const formatted = logs.map((log: any) => ({
+      _id: String(log._id),
+      orderId: String(log.orderId),
+      before: log.before,
+      after: log.after,
+      createdAt: log.createdAt,
+    }));
+    return res.json({ ok: true, data: formatted });
+  } catch (err) {
+    console.error("GET /orders/:id/history error:", err);
+    return res.status(500).json({ ok: false, message: "Server error" });
+  }
+});
+
 router.patch("/orders/:id", async (req, res) => {
   try {
     await dbConnect();
