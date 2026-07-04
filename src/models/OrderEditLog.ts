@@ -4,13 +4,18 @@ const { Schema, model, models } = mongoose;
 export interface OrderEditLogDoc extends mongoose.Document {
   _id: mongoose.Types.ObjectId;
   orderId: mongoose.Types.ObjectId;
+  editType: "lines" | "customer" | "shipping" | "notes" | "price";
   before: {
-    lines: Array<{ productId: string; qty: number; title: string; price: number; image?: string; color?: string }>;
-    totals: { subTotal: number; shipping: number; grandTotal: number };
+    lines?: Array<{ productId: string; qty: number; title: string; price: number; image?: string; color?: string }>;
+    totals?: { subTotal: number; shipping: number; grandTotal: number };
+    customer?: { name?: string; phone?: string; address?: string };
+    notes?: string;
   };
   after: {
-    lines: Array<{ productId: string; qty: number; title: string; price: number; image?: string; color?: string }>;
-    totals: { subTotal: number; shipping: number; grandTotal: number };
+    lines?: Array<{ productId: string; qty: number; title: string; price: number; image?: string; color?: string }>;
+    totals?: { subTotal: number; shipping: number; grandTotal: number };
+    customer?: { name?: string; phone?: string; address?: string };
+    notes?: string;
   };
   createdAt: Date;
   updatedAt: Date;
@@ -29,10 +34,21 @@ const lineSchema = new Schema(
 );
 
 const totalsSchema = new Schema(
+  { subTotal: { type: Number }, shipping: { type: Number }, grandTotal: { type: Number } },
+  { _id: false }
+);
+
+const customerSchema = new Schema(
+  { name: { type: String }, phone: { type: String }, address: { type: String } },
+  { _id: false }
+);
+
+const snapshotSchema = new Schema(
   {
-    subTotal: { type: Number, required: true },
-    shipping: { type: Number, required: true },
-    grandTotal: { type: Number, required: true },
+    lines: { type: [lineSchema], default: undefined },
+    totals: { type: totalsSchema, default: undefined },
+    customer: { type: customerSchema, default: undefined },
+    notes: { type: String, default: undefined },
   },
   { _id: false }
 );
@@ -40,14 +56,9 @@ const totalsSchema = new Schema(
 const OrderEditLogSchema = new Schema<OrderEditLogDoc>(
   {
     orderId: { type: Schema.Types.ObjectId, ref: "Order", required: true, index: true },
-    before: {
-      lines: { type: [lineSchema], required: true },
-      totals: { type: totalsSchema, required: true },
-    },
-    after: {
-      lines: { type: [lineSchema], required: true },
-      totals: { type: totalsSchema, required: true },
-    },
+    editType: { type: String, enum: ["lines", "customer", "shipping", "notes", "price"], required: true },
+    before: { type: snapshotSchema, required: true },
+    after: { type: snapshotSchema, required: true },
   },
   { timestamps: true }
 );

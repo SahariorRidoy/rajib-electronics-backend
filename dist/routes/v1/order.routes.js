@@ -159,6 +159,7 @@ router.post("/orders", async (req, res) => {
                 status: "PENDING",
             },
             notes: req.body.notes ?? "",
+            deliveryZone: req.body.deliveryZone === "inside" ? "inside" : "outside",
         };
         const createdOrder = await Order.create(orderData);
         // Create order notification
@@ -288,6 +289,92 @@ router.get("/debug/recent-orders", async (req, res) => {
         return res.status(500).json({ ok: false, message: "Debug failed" });
     }
 });
+/** PATCH /orders/:id/details — admin edits customer info, item rates, shipping, totals, notes */
+router.patch("/orders/:id/details", async (req, res) => {
+    try {
+        await dbConnect();
+        const { id } = req.params;
+        const { customer, lines, totals, notes } = req.body;
+        const order = await Order.findById(id).lean();
+        if (!order)
+            return res.status(404).json({ ok: false, message: "Order not found" });
+        const updateFields = {};
+        const logEntries = [];
+        // Customer changes
+        if (customer) {
+            const bc = { name: order.customer.name, phone: order.customer.phone, address: order.customer.address ?? "" };
+            const ac = { ...bc };
+            if (customer.name !== undefined) {
+                updateFields["customer.name"] = customer.name;
+                ac.name = customer.name;
+            }
+            if (customer.phone !== undefined) {
+                updateFields["customer.phone"] = customer.phone;
+                ac.phone = customer.phone;
+            }
+            if (customer.address !== undefined) {
+                updateFields["customer.address"] = customer.address;
+                ac.address = customer.address;
+            }
+            if (JSON.stringify(bc) !== JSON.stringify(ac)) {
+                logEntries.push({ orderId: order._id, editType: "customer", before: { customer: bc }, after: { customer: ac } });
+            }
+        }
+        // Notes changes
+        if (notes !== undefined) {
+            const beforeNotes = order.notes ?? "";
+            if (beforeNotes !== notes) {
+                logEntries.push({ orderId: order._id, editType: "notes", before: { notes: beforeNotes }, after: { notes } });
+            }
+            updateFields["notes"] = notes;
+        }
+        // Lines / price changes
+        if (lines && Array.isArray(lines)) {
+            for (const oldLine of order.lines) {
+                const newLine = lines.find((l) => String(l.productId) === String(oldLine.productId));
+                const diff = Number(oldLine.qty) - (newLine ? Math.max(1, Number(newLine.qty)) : 0);
+                if (diff !== 0)
+                    await Product.findByIdAndUpdate(oldLine.productId, { $inc: { stock: diff } });
+            }
+            const oldLines = order.lines.map((l) => ({ productId: String(l.productId), qty: l.qty, title: l.title, price: l.price, image: l.image ?? "", color: l.color ?? "" }));
+            const newLines = lines.map((l) => ({ productId: String(l.productId), qty: Math.max(1, Number(l.qty)), title: l.title ?? "", price: Number(l.price) ?? 0, image: l.image ?? "", color: l.color ?? "" }));
+            const hasPriceChange = oldLines.some((ol) => { const nl = newLines.find((n) => n.productId === ol.productId); return nl && nl.price !== ol.price; });
+            const hasQtyChange = oldLines.length !== newLines.length || oldLines.some((ol) => { const nl = newLines.find((n) => n.productId === ol.productId); return !nl || nl.qty !== ol.qty; });
+            if (hasPriceChange)
+                logEntries.push({ orderId: order._id, editType: "price", before: { lines: oldLines }, after: { lines: newLines } });
+            if (hasQtyChange)
+                logEntries.push({ orderId: order._id, editType: "lines", before: { lines: oldLines }, after: { lines: newLines } });
+            updateFields["lines"] = newLines.map((l) => ({ ...l, productId: new mongoose.Types.ObjectId(l.productId) }));
+        }
+        // Shipping / totals changes
+        if (totals) {
+            const bt = { subTotal: order.totals.subTotal, shipping: order.totals.shipping, grandTotal: order.totals.grandTotal };
+            if (totals.subTotal !== undefined)
+                updateFields["totals.subTotal"] = Number(totals.subTotal);
+            if (totals.shipping !== undefined)
+                updateFields["totals.shipping"] = Number(totals.shipping);
+            if (totals.grandTotal !== undefined)
+                updateFields["totals.grandTotal"] = Number(totals.grandTotal);
+            const at = { subTotal: totals.subTotal ?? bt.subTotal, shipping: totals.shipping ?? bt.shipping, grandTotal: totals.grandTotal ?? bt.grandTotal };
+            if (bt.shipping !== at.shipping) {
+                logEntries.push({ orderId: order._id, editType: "shipping", before: { totals: bt }, after: { totals: at } });
+            }
+        }
+        const updated = await Order.findByIdAndUpdate(id, updateFields, { new: true }).lean();
+        if (logEntries.length > 0)
+            await OrderEditLog.insertMany(logEntries);
+        const formatted = {
+            ...updated,
+            _id: String(updated._id),
+            lines: updated.lines.map((l) => ({ ...l, productId: String(l.productId) })),
+        };
+        return res.json({ ok: true, data: formatted });
+    }
+    catch (err) {
+        console.error("PATCH /orders/:id/details error:", err);
+        return res.status(500).json({ ok: false, message: "Server error", error: String(err) });
+    }
+});
 /** PATCH /orders/:id/lines — admin edits item quantities or removes items */
 router.patch("/orders/:id/lines", async (req, res) => {
     try {
@@ -326,32 +413,18 @@ router.patch("/orders/:id/lines", async (req, res) => {
             color: l.color ?? "",
         }));
         const updated = await Order.findByIdAndUpdate(id, { lines: updatedLines, "totals.subTotal": subTotal, "totals.grandTotal": grandTotal }, { new: true }).lean();
-        // Write audit log — separate collection, never read by customer app
-        await OrderEditLog.create({
-            orderId: order._id,
-            before: {
-                lines: order.lines.map((l) => ({
-                    productId: String(l.productId),
-                    qty: l.qty,
-                    title: l.title,
-                    price: l.price,
-                    image: l.image ?? "",
-                    color: l.color ?? "",
-                })),
-                totals: order.totals,
-            },
-            after: {
-                lines: lines.map((l) => ({
-                    productId: String(l.productId),
-                    qty: Math.max(1, Number(l.qty)),
-                    title: l.title ?? "",
-                    price: Number(l.price) ?? 0,
-                    image: l.image ?? "",
-                    color: l.color ?? "",
-                })),
-                totals: { subTotal, shipping, grandTotal },
-            },
-        });
+        // Write audit log
+        const oldLines = order.lines.map((l) => ({ productId: String(l.productId), qty: l.qty, title: l.title, price: l.price, image: l.image ?? "", color: l.color ?? "" }));
+        const newLinesLog = lines.map((l) => ({ productId: String(l.productId), qty: Math.max(1, Number(l.qty)), title: l.title ?? "", price: Number(l.price) ?? 0, image: l.image ?? "", color: l.color ?? "" }));
+        const linesLogEntries = [];
+        const hasPriceChange = oldLines.some((ol) => { const nl = newLinesLog.find((n) => n.productId === ol.productId); return nl && nl.price !== ol.price; });
+        const hasQtyChange = oldLines.length !== newLinesLog.length || oldLines.some((ol) => { const nl = newLinesLog.find((n) => n.productId === ol.productId); return !nl || nl.qty !== ol.qty; });
+        if (hasPriceChange)
+            linesLogEntries.push({ orderId: order._id, editType: "price", before: { lines: oldLines, totals: order.totals }, after: { lines: newLinesLog, totals: { subTotal, shipping, grandTotal } } });
+        if (hasQtyChange)
+            linesLogEntries.push({ orderId: order._id, editType: "lines", before: { lines: oldLines, totals: order.totals }, after: { lines: newLinesLog, totals: { subTotal, shipping, grandTotal } } });
+        if (linesLogEntries.length > 0)
+            await OrderEditLog.insertMany(linesLogEntries);
         const formatted = {
             ...updated,
             _id: String(updated._id),
@@ -364,7 +437,7 @@ router.patch("/orders/:id/lines", async (req, res) => {
         return res.status(500).json({ ok: false, message: "Server error", error: String(err) });
     }
 });
-/** GET /orders/:id/history — admin audit log for line edits */
+/** GET /orders/:id/history — admin audit log */
 router.get("/orders/:id/history", async (req, res) => {
     try {
         await dbConnect();
@@ -376,6 +449,7 @@ router.get("/orders/:id/history", async (req, res) => {
         const formatted = logs.map((log) => ({
             _id: String(log._id),
             orderId: String(log.orderId),
+            editType: log.editType ?? "lines",
             before: log.before,
             after: log.after,
             createdAt: log.createdAt,

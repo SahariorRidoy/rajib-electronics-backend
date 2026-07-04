@@ -82,4 +82,38 @@ router.get("/customer/orders", async (req, res) => {
         return res.status(500).json({ ok: false, message: "Server error" });
     }
 });
+/** PATCH /customer/orders/:id/address — customer can only edit their delivery address */
+router.patch("/customer/orders/:id/address", async (req, res) => {
+    try {
+        await dbConnect();
+        const { id } = req.params;
+        const { phone, address } = req.body;
+        if (!phone || !address?.trim()) {
+            return res.status(400).json({ ok: false, message: "Phone and address are required" });
+        }
+        const order = await Order.findById(id).lean();
+        if (!order)
+            return res.status(404).json({ ok: false, message: "Order not found" });
+        // Verify the order belongs to this phone number
+        if (order.customer?.phone !== phone) {
+            return res.status(403).json({ ok: false, message: "Unauthorized" });
+        }
+        if (["DELIVERED", "CANCELLED", "RETURNED"].includes(order.status)) {
+            return res.status(400).json({ ok: false, message: "Cannot edit a completed order" });
+        }
+        const updated = await Order.findByIdAndUpdate(id, { "customer.address": address.trim() }, { new: true }).lean();
+        return res.json({
+            ok: true,
+            data: {
+                ...updated,
+                _id: String(updated._id),
+                lines: updated.lines.map((l) => ({ ...l, productId: String(l.productId) })),
+            },
+        });
+    }
+    catch (e) {
+        console.error("PATCH /customer/orders/:id/address error:", e);
+        return res.status(500).json({ ok: false, message: "Server error" });
+    }
+});
 export default router;

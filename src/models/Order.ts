@@ -26,6 +26,7 @@ export interface IOrderDocument extends Document {
     transactionId?: string;
   };
   notes?: string;
+  deliveryZone?: "inside" | "outside";
   idempotencyKey?: string;
   courier?: {
     provider: "steadfast" | "pathao";
@@ -75,6 +76,7 @@ const OrderSchema = new Schema<IOrderDocument>(
       transactionId: { type: String, default: "" },
     },
     notes: { type: String, default: "" },
+    deliveryZone: { type: String, enum: ["inside", "outside"], default: "outside" },
     idempotencyKey: { type: String, index: { unique: true, sparse: true } },
     courier: {
       provider: { type: String, enum: ["steadfast", "pathao"] },

@@ -35,6 +35,7 @@ const OrderSchema = new Schema({
         transactionId: { type: String, default: "" },
     },
     notes: { type: String, default: "" },
+    deliveryZone: { type: String, enum: ["inside", "outside"], default: "outside" },
     idempotencyKey: { type: String, index: { unique: true, sparse: true } },
     courier: {
         provider: { type: String, enum: ["steadfast", "pathao"] },
