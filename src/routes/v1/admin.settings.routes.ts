@@ -50,6 +50,21 @@ router.patch("/settings", requireAdmin, async (req, res, next) => {
   }
 });
 
+// PATCH /settings/hotline — update hotline number
+router.patch("/settings/hotline", requireAdmin, async (req, res, next) => {
+  try {
+    await dbConnect();
+    const { hotline } = z.object({ hotline: z.string() }).parse(req.body);
+    let settings = await SiteSettings.findOne();
+    if (!settings) settings = await SiteSettings.create({});
+    settings.hotline = hotline;
+    await settings.save();
+    res.json({ ok: true, data: settings });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PATCH /settings/contact — update phones & emails
 router.patch("/settings/contact", requireAdmin, async (req, res, next) => {
   try {

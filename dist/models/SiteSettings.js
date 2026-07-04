@@ -13,6 +13,7 @@ const SocialLinkSchema = new Schema({
 const SiteSettingsSchema = new Schema({
     logos: { type: [LogoSchema], default: [] },
     siteName: { type: String, default: "Rajib Electronics" },
+    hotline: { type: String, default: "" },
     contactInfo: {
         phones: { type: [String], default: [] },
         emails: { type: [String], default: [] },

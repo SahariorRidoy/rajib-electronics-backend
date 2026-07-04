@@ -22,6 +22,7 @@ export interface ContactInfo {
 export interface SiteSettingsDoc extends mongoose.Document {
   logos: LogoEntry[];
   siteName: string;
+  hotline: string;
   contactInfo: ContactInfo;
   socialLinks: SocialLinkEntry[];
 }
@@ -48,6 +49,7 @@ const SiteSettingsSchema = new Schema<SiteSettingsDoc>(
   {
     logos: { type: [LogoSchema], default: [] },
     siteName: { type: String, default: "Rajib Electronics" },
+    hotline: { type: String, default: "" },
     contactInfo: {
       phones: { type: [String], default: [] },
       emails: { type: [String], default: [] },
