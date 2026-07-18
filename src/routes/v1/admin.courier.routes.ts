@@ -62,6 +62,7 @@ router.post("/courier/steadfast/send/:orderId", async (req, res, next) => {
         recipient_address: order.customer.address || "N/A",
         cod_amount: order.totals.grandTotal,
         note: order.notes,
+        item_description: order.lines.map((l) => `${l.title} x${l.qty}`).join(", "),
       });
     } catch (fetchErr) {
       return res.status(502).json({
@@ -111,6 +112,7 @@ router.post("/courier/steadfast/bulk-send", async (req, res, next) => {
       recipient_address: o.customer.address || "N/A",
       cod_amount: o.totals.grandTotal,
       note: o.notes,
+      item_description: o.lines.map((l) => `${l.title} x${l.qty}`).join(", "),
     }));
 
     const result = await steadfastBulkCreate(payload);
