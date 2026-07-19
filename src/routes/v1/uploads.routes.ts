@@ -10,7 +10,7 @@ import { env } from "../../env.js";
 
 const router = Router();
 
-const ALLOWED_FOLDERS = ["banners", "products", "variants", "categories", "manufacturers", "logos"] as const;
+const ALLOWED_FOLDERS = ["banners", "products", "variants", "categories", "manufacturers", "logos", "reviews"] as const;
 type UploadFolder = typeof ALLOWED_FOLDERS[number];
 
 const ALLOWED_MIME = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
@@ -63,6 +63,26 @@ router.post("/uploads", requireAdmin, upload.single("file"), async (req: Request
     const relativePath = `/uploads/${folder}/${filename}`;
 
     return res.status(201).json({ ok: true, data: { url, filePath: relativePath } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/uploads/review-image — public, for customer review avatars
+router.post("/uploads/review-image", upload.single("file"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ ok: false, message: "No file provided" });
+    }
+    const filename = `${uuidv4()}.webp`;
+    const uploadDir = getUploadDir("reviews");
+    const filePath = path.join(uploadDir, filename);
+    await sharp(req.file.buffer)
+      .resize({ width: 200, height: 200, fit: "cover" })
+      .webp({ quality: 80 })
+      .toFile(filePath);
+    const url = `${env.BACKEND_URL}/uploads/reviews/${filename}`;
+    return res.status(201).json({ ok: true, data: { url } });
   } catch (err) {
     next(err);
   }

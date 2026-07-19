@@ -8,7 +8,7 @@ import { z } from "zod";
 import requireAdmin from "../../middlewares/auth.js";
 import { env } from "../../env.js";
 const router = Router();
-const ALLOWED_FOLDERS = ["banners", "products", "variants", "categories", "manufacturers", "logos"];
+const ALLOWED_FOLDERS = ["banners", "products", "variants", "categories", "manufacturers", "logos", "reviews"];
 const ALLOWED_MIME = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 // Store in memory first — sharp will process then save to disk
@@ -52,6 +52,26 @@ router.post("/uploads", requireAdmin, upload.single("file"), async (req, res, ne
         const url = `${env.BACKEND_URL}/uploads/${folder}/${filename}`;
         const relativePath = `/uploads/${folder}/${filename}`;
         return res.status(201).json({ ok: true, data: { url, filePath: relativePath } });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+// POST /api/v1/uploads/review-image — public, for customer review avatars
+router.post("/uploads/review-image", upload.single("file"), async (req, res, next) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ ok: false, message: "No file provided" });
+        }
+        const filename = `${uuidv4()}.webp`;
+        const uploadDir = getUploadDir("reviews");
+        const filePath = path.join(uploadDir, filename);
+        await sharp(req.file.buffer)
+            .resize({ width: 200, height: 200, fit: "cover" })
+            .webp({ quality: 80 })
+            .toFile(filePath);
+        const url = `${env.BACKEND_URL}/uploads/reviews/${filename}`;
+        return res.status(201).json({ ok: true, data: { url } });
     }
     catch (err) {
         next(err);
