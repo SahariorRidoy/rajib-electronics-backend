@@ -35,6 +35,12 @@ const OrderSchema = new Schema({
         transactionId: { type: String, default: "" },
     },
     notes: { type: String, default: "" },
+    adminNotes: [
+        {
+            text: { type: String, required: true },
+            createdAt: { type: Date, default: Date.now },
+        },
+    ],
     deliveryZone: { type: String, enum: ["inside", "outside"], default: "outside" },
     idempotencyKey: { type: String, index: { unique: true, sparse: true } },
     courier: {

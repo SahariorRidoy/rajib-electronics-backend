@@ -476,6 +476,60 @@ router.patch("/orders/:id/lines", async (req, res) => {
   }
 });
 
+/** POST /orders/:id/notes — admin adds a new note */
+router.post("/orders/:id/notes", async (req, res) => {
+  try {
+    await dbConnect();
+    const { id } = req.params;
+    const { text } = req.body;
+    if (!text?.trim()) return res.status(400).json({ ok: false, message: "Note text required" });
+
+    const updated = await (Order as any).findByIdAndUpdate(
+      id,
+      { $push: { adminNotes: { text: text.trim(), createdAt: new Date() } } },
+      { new: true }
+    ).lean();
+    if (!updated) return res.status(404).json({ ok: false, message: "Order not found" });
+
+    const formatted = {
+      ...updated,
+      _id: String(updated._id),
+      lines: updated.lines.map((l: any) => ({ ...l, productId: String(l.productId) })),
+    };
+    return res.json({ ok: true, data: formatted });
+  } catch (err) {
+    console.error("POST /orders/:id/notes error:", err);
+    return res.status(500).json({ ok: false, message: "Server error" });
+  }
+});
+
+/** DELETE /orders/:id/notes/:noteIndex — admin deletes a note by index */
+router.delete("/orders/:id/notes/:noteIndex", async (req, res) => {
+  try {
+    await dbConnect();
+    const { id, noteIndex } = req.params;
+    const idx = Number(noteIndex);
+
+    const order = await (Order as any).findById(id).lean();
+    if (!order) return res.status(404).json({ ok: false, message: "Order not found" });
+
+    const notes = Array.isArray(order.adminNotes) ? [...order.adminNotes] : [];
+    if (idx < 0 || idx >= notes.length) return res.status(400).json({ ok: false, message: "Invalid note index" });
+    notes.splice(idx, 1);
+
+    const updated = await (Order as any).findByIdAndUpdate(id, { adminNotes: notes }, { new: true }).lean();
+    const formatted = {
+      ...updated,
+      _id: String(updated._id),
+      lines: updated.lines.map((l: any) => ({ ...l, productId: String(l.productId) })),
+    };
+    return res.json({ ok: true, data: formatted });
+  } catch (err) {
+    console.error("DELETE /orders/:id/notes/:noteIndex error:", err);
+    return res.status(500).json({ ok: false, message: "Server error" });
+  }
+});
+
 /** GET /orders/:id/history — admin audit log */
 router.get("/orders/:id/history", async (req, res) => {
   try {

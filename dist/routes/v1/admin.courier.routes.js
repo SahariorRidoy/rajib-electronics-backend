@@ -26,6 +26,7 @@ router.post("/courier/steadfast/send/:orderId", async (req, res, next) => {
         if (order.courier?.consignmentId) {
             return res.status(400).json({ ok: false, code: "ALREADY_SENT", data: order.courier });
         }
+        const { note } = z.object({ note: z.string().optional() }).parse(req.body);
         let result;
         try {
             result = await steadfastCreateConsignment({
@@ -34,7 +35,7 @@ router.post("/courier/steadfast/send/:orderId", async (req, res, next) => {
                 recipient_phone: order.customer.phone,
                 recipient_address: order.customer.address || "N/A",
                 cod_amount: order.totals.grandTotal,
-                note: order.notes,
+                note: note || undefined,
                 item_description: order.lines.map((l) => `${l.title} x${l.qty}`).join(", "),
             });
         }
@@ -81,7 +82,6 @@ router.post("/courier/steadfast/bulk-send", async (req, res, next) => {
             recipient_phone: o.customer.phone,
             recipient_address: o.customer.address || "N/A",
             cod_amount: o.totals.grandTotal,
-            note: o.notes,
             item_description: o.lines.map((l) => `${l.title} x${l.qty}`).join(", "),
         }));
         const result = await steadfastBulkCreate(payload);
