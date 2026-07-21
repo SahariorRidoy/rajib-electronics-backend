@@ -1,4 +1,5 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import { z } from "zod";
 import { requireAdmin } from "../../middlewares/auth.js";
 import { dbConnect } from "../../db/connection.js";
@@ -104,38 +105,90 @@ router.post("/courier/steadfast/bulk-send", async (req, res, next) => {
     await dbConnect();
     const { orderIds } = z.object({ orderIds: z.array(z.string()) }).parse(req.body);
 
-    const orders = await Order.find({ _id: { $in: orderIds }, "courier.consignmentId": { $exists: false } });
+    const objectIds = orderIds.map((id) => new mongoose.Types.ObjectId(id));
+    const orders = await Order.find({ _id: { $in: objectIds }, $or: [{ courier: { $exists: false } }, { "courier.consignmentId": { $exists: false } }] });
     if (!orders.length) return res.status(400).json({ ok: false, code: "NO_ELIGIBLE_ORDERS" });
 
-    const payload = orders.map((o) => ({
-      invoice: o._id.toString(),
-      recipient_name: o.customer.name,
-      recipient_phone: o.customer.phone,
-      recipient_address: o.customer.address || "N/A",
-      cod_amount: o.totals.grandTotal,
-      item_description: o.lines.map((l) => `${l.title} x${l.qty}`).join(", "),
-    }));
+    const now = Date.now();
+    const rand = Math.floor(Math.random() * 9000) + 1000;
+    const invoiceMap = new Map<string, typeof orders[0]>();
+    const payload = orders.map((o, idx) => {
+      const invoice = `${String(now).slice(-8)}${rand}-${idx}`;
+      invoiceMap.set(invoice, o);
+      return {
+        invoice,
+        recipient_name: o.customer.name,
+        recipient_phone: o.customer.phone,
+        recipient_address: o.customer.address || "N/A",
+        cod_amount: o.totals.grandTotal,
+        note: "",
+        item_description: o.lines.map((l) => `${l.title} x${l.qty}`).join(", "),
+      };
+    });
 
-    const result = await steadfastBulkCreate(payload);
+    let result: unknown;
+    try {
+      result = await steadfastBulkCreate(payload);
+    } catch (fetchErr) {
+      return res.status(502).json({
+        ok: false,
+        code: "STEADFAST_UNREACHABLE",
+        message: String(fetchErr),
+      });
+    }
 
-    // docs: result is a direct array of consignment objects
-    const resultArray = Array.isArray(result) ? result : (result?.data ?? []);
+    // Steadfast bulk response can be { status, data: [...] } or a direct array
+    const raw = result as Record<string, unknown>;
+    if (!raw || (raw.status !== undefined && raw.status !== 200)) {
+      return res.status(400).json({
+        ok: false,
+        message: (raw?.message as string) ?? "Steadfast rejected the bulk order",
+        data: raw,
+      });
+    }
+
+    const resultArray: Record<string, unknown>[] = Array.isArray(raw)
+      ? raw
+      : Array.isArray(raw.data)
+      ? (raw.data as Record<string, unknown>[])
+      : [];
+
+    if (!resultArray.length) {
+      return res.status(400).json({
+        ok: false,
+        code: "STEADFAST_EMPTY_RESPONSE",
+        message: "Steadfast returned no consignments",
+        data: raw,
+      });
+    }
+
+    let savedCount = 0;
     for (const item of resultArray) {
-      const order = orders.find((o) => o._id.toString() === String(item.invoice));
-      if (order && item.consignment_id && item.status !== "error") {
+      const order = invoiceMap.get(String(item.invoice));
+      if (order && item.consignment_id && item.status === "success") {
         order.courier = {
           provider: "steadfast",
           consignmentId: String(item.consignment_id),
-          trackingCode: item.tracking_code,
-          status: item.status,
+          trackingCode: item.tracking_code as string,
+          status: item.status as string,
           sentAt: new Date(),
         };
         order.status = "IN_SHIPPING";
         await order.save();
+        savedCount++;
       }
     }
 
-    res.json({ ok: true, data: result });
+    if (savedCount === 0) {
+      return res.status(400).json({
+        ok: false,
+        code: "STEADFAST_ALL_FAILED",
+        message: "Steadfast accepted the request but all orders failed",
+        data: resultArray,
+      });
+    }
+
+    res.json({ ok: true, data: resultArray, savedCount });
   } catch (err) {
     next(err);
   }

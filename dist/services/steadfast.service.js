@@ -25,11 +25,29 @@ export async function steadfastCreateConsignment(data) {
     });
 }
 export async function steadfastBulkCreate(orders) {
-    return safeFetch(`${BASE}/create_order/bulk-order`, {
+    const sanitize = (str, maxLen = 100) => str.replace(/[^\x00-\x7F]/g, "").trim().substring(0, maxLen) || "N/A";
+    const dataStr = JSON.stringify(orders.map(o => ({
+        ...o,
+        recipient_name: sanitize(o.recipient_name),
+        recipient_address: sanitize(o.recipient_address),
+        item_description: o.item_description ? sanitize(o.item_description) : undefined,
+    })));
+    const res = await fetch(`${BASE}/create_order/bulk-order`, {
         method: "POST",
-        headers: headers(),
-        body: JSON.stringify({ data: JSON.stringify(orders) }),
+        headers: {
+            "Api-Key": env.STEADFAST_API_KEY,
+            "Secret-Key": env.STEADFAST_API_SECRET,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ data: dataStr }),
     });
+    const text = await res.text();
+    try {
+        return JSON.parse(text);
+    }
+    catch {
+        return { status: res.status, message: text.trim() };
+    }
 }
 export async function steadfastTrackByConsignment(consignment_id) {
     return safeFetch(`${BASE}/status_by_cid/${consignment_id}`, { headers: headers() });
