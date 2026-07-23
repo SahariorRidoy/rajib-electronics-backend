@@ -25,13 +25,7 @@ export async function steadfastCreateConsignment(data) {
     });
 }
 export async function steadfastBulkCreate(orders) {
-    const sanitize = (str, maxLen = 100) => str.replace(/[^\x00-\x7F]/g, "").trim().substring(0, maxLen) || "N/A";
-    const dataStr = JSON.stringify(orders.map(o => ({
-        ...o,
-        recipient_name: sanitize(o.recipient_name),
-        recipient_address: sanitize(o.recipient_address),
-        item_description: o.item_description ? sanitize(o.item_description) : undefined,
-    })));
+    const dataStr = JSON.stringify(orders.map(o => ({ ...o })));
     const res = await fetch(`${BASE}/create_order/bulk-order`, {
         method: "POST",
         headers: {
