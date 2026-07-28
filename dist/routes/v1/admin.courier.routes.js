@@ -75,7 +75,7 @@ router.post("/courier/steadfast/bulk-send", async (req, res, next) => {
         await dbConnect();
         const { orderIds } = z.object({ orderIds: z.array(z.string()) }).parse(req.body);
         const objectIds = orderIds.map((id) => new mongoose.Types.ObjectId(id));
-        const orders = await Order.find({ _id: { $in: objectIds }, $or: [{ courier: { $exists: false } }, { "courier.consignmentId": { $exists: false } }] });
+        const orders = await Order.find({ _id: { $in: objectIds }, $or: [{ courier: { $exists: false } }, { "courier.consignmentId": { $exists: false } }] }).lean();
         if (!orders.length)
             return res.status(400).json({ ok: false, code: "NO_ELIGIBLE_ORDERS" });
         const now = Date.now();
@@ -84,6 +84,10 @@ router.post("/courier/steadfast/bulk-send", async (req, res, next) => {
         const payload = orders.map((o, idx) => {
             const invoice = `${String(now).slice(-8)}${rand}-${idx}`;
             invoiceMap.set(invoice, o);
+            const itemDesc = (o.lines || [])
+                .map((l) => `${(l.title || "Item").substring(0, 100)} x${l.qty || 1}`)
+                .join(", ")
+                .substring(0, 500);
             return {
                 invoice,
                 recipient_name: o.customer.name,
@@ -91,7 +95,7 @@ router.post("/courier/steadfast/bulk-send", async (req, res, next) => {
                 recipient_address: o.customer.address || "N/A",
                 cod_amount: o.totals.grandTotal,
                 note: "",
-                item_description: o.lines.map((l) => `${l.title} x${l.qty}`).join(", "),
+                item_description: itemDesc || "Product",
             };
         });
         let result;
@@ -131,15 +135,16 @@ router.post("/courier/steadfast/bulk-send", async (req, res, next) => {
         for (const item of resultArray) {
             const order = invoiceMap.get(String(item.invoice));
             if (order && item.consignment_id && item.status === "success") {
-                order.courier = {
-                    provider: "steadfast",
-                    consignmentId: String(item.consignment_id),
-                    trackingCode: item.tracking_code,
-                    status: item.status,
-                    sentAt: new Date(),
-                };
-                order.status = "IN_SHIPPING";
-                await order.save();
+                await Order.findByIdAndUpdate(order._id, {
+                    courier: {
+                        provider: "steadfast",
+                        consignmentId: String(item.consignment_id),
+                        trackingCode: item.tracking_code,
+                        status: item.status,
+                        sentAt: new Date(),
+                    },
+                    status: "IN_SHIPPING",
+                });
                 savedCount++;
             }
         }
