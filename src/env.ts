@@ -27,4 +27,8 @@ export const env = {
   PATHAO_PASSWORD: process.env.PATHAO_PASSWORD || "",
   PATHAO_BASE_URL:
     process.env.PATHAO_BASE_URL || "https://hermes-sandbox.pathao.com",
+  PAYSTATION_MERCHANT_ID: process.env.PAYSTATION_MERCHANT_ID || "",
+  PAYSTATION_PASSWORD: process.env.PAYSTATION_PASSWORD || "",
+  PAYSTATION_BASE_URL: process.env.PAYSTATION_BASE_URL || "https://sandbox.paystation.com.bd",
+  CUSTOMER_FRONTEND_URL: process.env.CUSTOMER_FRONTEND_URL || "http://localhost:3000",
 };

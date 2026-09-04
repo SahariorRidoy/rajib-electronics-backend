@@ -33,6 +33,10 @@ const OrderSchema = new Schema({
         method: { type: String, required: true },
         status: { type: String, required: true },
         transactionId: { type: String, default: "" },
+        invoiceNumber: { type: String, default: "" },
+        paidAmount: { type: Number, default: 0 },
+        paidAt: { type: Date },
+        payerMobile: { type: String, default: "" },
     },
     notes: { type: String, default: "" },
     adminNotes: [

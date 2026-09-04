@@ -19,12 +19,20 @@ export interface ContactInfo {
   emails: string[];
 }
 
+export interface PaystationSettings {
+  merchantId: string;
+  password: string;
+  baseUrl: string;
+  isLive: boolean;
+}
+
 export interface SiteSettingsDoc extends mongoose.Document {
   logos: LogoEntry[];
   siteName: string;
   hotline: string;
   contactInfo: ContactInfo;
   socialLinks: SocialLinkEntry[];
+  paystationSettings: PaystationSettings;
 }
 
 const LogoSchema = new Schema<LogoEntry>(
@@ -55,6 +63,12 @@ const SiteSettingsSchema = new Schema<SiteSettingsDoc>(
       emails: { type: [String], default: [] },
     },
     socialLinks: { type: [SocialLinkSchema], default: [] },
+    paystationSettings: {
+      merchantId: { type: String, default: "" },
+      password: { type: String, default: "" },
+      baseUrl: { type: String, default: "https://sandbox.paystation.com.bd" },
+      isLive: { type: Boolean, default: false },
+    },
   },
   { timestamps: true }
 );

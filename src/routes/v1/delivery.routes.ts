@@ -24,6 +24,7 @@ router.get("/delivery-settings", async (req, res, next) => {
       ...raw,
       insideDhakaCharge: raw.insideDhakaCharge ?? fallback,
       outsideDhakaCharge: raw.outsideDhakaCharge ?? fallback,
+      deliveryChargePaymentRequired: raw.deliveryChargePaymentRequired ?? false,
     };
 
     res.json({ ok: true, data });
@@ -55,6 +56,7 @@ router.post("/delivery-charge", async (req, res, next) => {
           insideDhakaCharge: 60,
           outsideDhakaCharge: 120,
           zone: zone || "outside",
+          deliveryChargePaymentRequired: false,
         },
       });
     }
@@ -76,6 +78,7 @@ router.post("/delivery-charge", async (req, res, next) => {
         insideDhakaCharge,
         outsideDhakaCharge,
         zone: zone || "outside",
+        deliveryChargePaymentRequired: raw.deliveryChargePaymentRequired ?? false,
       },
     });
   } catch (err) {

@@ -6,6 +6,7 @@ export interface DeliverySettingsDoc extends mongoose.Document {
   insideDhakaCharge: number;
   outsideDhakaCharge: number;
   isActive: boolean;
+  deliveryChargePaymentRequired: boolean;
 }
 
 const DeliverySettingsSchema = new Schema<DeliverySettingsDoc>(
@@ -14,6 +15,7 @@ const DeliverySettingsSchema = new Schema<DeliverySettingsDoc>(
     insideDhakaCharge: { type: Number, required: false, default: 60 },
     outsideDhakaCharge: { type: Number, required: false, default: 120 },
     isActive: { type: Boolean, default: true },
+    deliveryChargePaymentRequired: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

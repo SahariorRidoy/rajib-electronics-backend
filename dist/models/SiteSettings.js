@@ -19,6 +19,12 @@ const SiteSettingsSchema = new Schema({
         emails: { type: [String], default: [] },
     },
     socialLinks: { type: [SocialLinkSchema], default: [] },
+    paystationSettings: {
+        merchantId: { type: String, default: "" },
+        password: { type: String, default: "" },
+        baseUrl: { type: String, default: "https://sandbox.paystation.com.bd" },
+        isLive: { type: Boolean, default: false },
+    },
 }, { timestamps: true });
 export const SiteSettings = models.SiteSettings ||
     model("SiteSettings", SiteSettingsSchema);

@@ -43,6 +43,7 @@ import invoicePdfRoutes from "./routes/v1/invoicePdf.routes.js";
 import reviewRoutes from "./routes/v1/review.routes.js";
 import adminReviewRoutes from "./routes/v1/admin.review.routes.js";
 import adminNotesRoutes from "./routes/v1/admin.notes.routes.js";
+import paymentRoutes from "./routes/v1/payment.routes.js";
 const app = express();
 // replace existing corsOptions block with this
 const allowedOrigins = (env.CORS_ORIGINS || "")
@@ -142,6 +143,7 @@ app.use("/api/v1", stockRouter);
 app.use("/api/v1", reviewRoutes);
 app.use("/api/v1/admin", adminReviewRoutes);
 app.use("/api/v1/admin", adminNotesRoutes);
+app.use("/api/v1", paymentRoutes);
 app.use((req, res) => res.status(404).json({ ok: false, code: "NOT_FOUND" }));
 app.use(errorMiddleware);
 export default app;

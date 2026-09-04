@@ -24,6 +24,10 @@ export interface IOrderDocument extends Document {
     method: string;
     status: string;
     transactionId?: string;
+    invoiceNumber?: string;
+    paidAmount?: number;
+    paidAt?: Date;
+    payerMobile?: string;
   };
   notes?: string;
   adminNotes?: Array<{ text: string; createdAt: Date }>;
@@ -75,6 +79,10 @@ const OrderSchema = new Schema<IOrderDocument>(
       method: { type: String, required: true },
       status: { type: String, required: true },
       transactionId: { type: String, default: "" },
+      invoiceNumber: { type: String, default: "" },
+      paidAmount: { type: Number, default: 0 },
+      paidAt: { type: Date },
+      payerMobile: { type: String, default: "" },
     },
     notes: { type: String, default: "" },
     adminNotes: [

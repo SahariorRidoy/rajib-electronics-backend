@@ -203,4 +203,67 @@ router.delete("/settings/logos/:logoId", requireAdmin, async (req, res, next) =>
   }
 });
 
+// GET /settings/paystation — get PayStation credentials (password masked)
+router.get("/settings/paystation", requireAdmin, async (req, res, next) => {
+  try {
+    await dbConnect();
+    const settings = await SiteSettings.findOne().lean() as any;
+    if (!settings) return res.status(404).json({ ok: false, code: "NOT_FOUND" });
+    const ps = settings.paystationSettings || {};
+    res.json({
+      ok: true,
+      data: {
+        merchantId: ps.merchantId || "",
+        password: ps.password ? "••••••••" : "",
+        hasPassword: !!(ps.password),
+        baseUrl: ps.baseUrl || "https://sandbox.paystation.com.bd",
+        isLive: ps.isLive || false,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /settings/paystation — update PayStation credentials
+router.patch("/settings/paystation", requireAdmin, async (req, res, next) => {
+  try {
+    await dbConnect();
+    const { merchantId, password, isLive } = z.object({
+      merchantId: z.string().optional(),
+      password: z.string().optional(),
+      isLive: z.boolean().optional(),
+    }).parse(req.body);
+
+    let settings = await SiteSettings.findOne();
+    if (!settings) settings = await SiteSettings.create({});
+
+    if (merchantId !== undefined) settings.paystationSettings.merchantId = merchantId;
+    // Only update password if a real value is sent (not the masked placeholder)
+    if (password !== undefined && password !== "••••••••") {
+      settings.paystationSettings.password = password;
+    }
+    if (isLive !== undefined) {
+      settings.paystationSettings.isLive = isLive;
+      settings.paystationSettings.baseUrl = isLive
+        ? "https://api.paystation.com.bd"
+        : "https://sandbox.paystation.com.bd";
+    }
+
+    await settings.save();
+    res.json({
+      ok: true,
+      data: {
+        merchantId: settings.paystationSettings.merchantId,
+        password: settings.paystationSettings.password ? "••••••••" : "",
+        hasPassword: !!(settings.paystationSettings.password),
+        baseUrl: settings.paystationSettings.baseUrl,
+        isLive: settings.paystationSettings.isLive,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

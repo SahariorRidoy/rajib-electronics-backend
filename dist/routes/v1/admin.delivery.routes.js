@@ -9,6 +9,7 @@ const DeliverySettingsDTO = z.object({
     insideDhakaCharge: z.number().min(0).optional(),
     outsideDhakaCharge: z.number().min(0).optional(),
     isActive: z.boolean().optional(),
+    deliveryChargePaymentRequired: z.boolean().optional(),
 });
 // Get delivery settings — normalise old documents that still have deliveryCharge
 router.get("/delivery-settings", async (req, res, next) => {
@@ -24,6 +25,7 @@ router.get("/delivery-settings", async (req, res, next) => {
             ...raw,
             insideDhakaCharge: raw.insideDhakaCharge ?? fallback,
             outsideDhakaCharge: raw.outsideDhakaCharge ?? fallback,
+            deliveryChargePaymentRequired: raw.deliveryChargePaymentRequired ?? false,
         };
         res.json({ ok: true, data: normalised });
     }
@@ -45,6 +47,7 @@ router.post("/delivery-settings", requireAdmin, async (req, res, next) => {
             insideDhakaCharge: data.insideDhakaCharge ?? 60,
             outsideDhakaCharge: data.outsideDhakaCharge ?? 120,
             isActive: data.isActive ?? true,
+            deliveryChargePaymentRequired: data.deliveryChargePaymentRequired ?? false,
         });
         res.status(201).json({ ok: true, data: settings });
     }
@@ -68,6 +71,8 @@ router.patch("/delivery-settings", requireAdmin, async (req, res, next) => {
             settings.outsideDhakaCharge = data.outsideDhakaCharge;
         if (data.isActive !== undefined)
             settings.isActive = data.isActive;
+        if (data.deliveryChargePaymentRequired !== undefined)
+            settings.deliveryChargePaymentRequired = data.deliveryChargePaymentRequired;
         await settings.save();
         res.json({ ok: true, data: settings });
     }
