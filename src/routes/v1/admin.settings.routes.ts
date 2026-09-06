@@ -225,6 +225,40 @@ router.get("/settings/paystation", requireAdmin, async (req, res, next) => {
   }
 });
 
+// GET /settings/tiktok-pixel — get TikTok Pixel settings
+router.get("/settings/tiktok-pixel", requireAdmin, async (_req, res, next) => {
+  try {
+    await dbConnect();
+    const settings = await SiteSettings.findOne().lean() as any;
+    if (!settings) return res.status(404).json({ ok: false, code: "NOT_FOUND" });
+    res.json({ ok: true, data: settings.tiktokPixel ?? { pixelId: "", isEnabled: false } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /settings/tiktok-pixel — update TikTok Pixel settings
+router.patch("/settings/tiktok-pixel", requireAdmin, async (req, res, next) => {
+  try {
+    await dbConnect();
+    const { pixelId, isEnabled } = z.object({
+      pixelId: z.string().optional(),
+      isEnabled: z.boolean().optional(),
+    }).parse(req.body);
+
+    let settings = await SiteSettings.findOne();
+    if (!settings) settings = await SiteSettings.create({});
+
+    if (pixelId !== undefined) settings.tiktokPixel.pixelId = pixelId;
+    if (isEnabled !== undefined) settings.tiktokPixel.isEnabled = isEnabled;
+
+    await settings.save();
+    res.json({ ok: true, data: settings.tiktokPixel });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PATCH /settings/paystation — update PayStation credentials
 router.patch("/settings/paystation", requireAdmin, async (req, res, next) => {
   try {

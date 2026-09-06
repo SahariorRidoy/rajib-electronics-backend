@@ -25,6 +25,10 @@ const SiteSettingsSchema = new Schema({
         baseUrl: { type: String, default: "https://sandbox.paystation.com.bd" },
         isLive: { type: Boolean, default: false },
     },
+    tiktokPixel: {
+        pixelId: { type: String, default: "" },
+        isEnabled: { type: Boolean, default: false },
+    },
 }, { timestamps: true });
 export const SiteSettings = models.SiteSettings ||
     model("SiteSettings", SiteSettingsSchema);

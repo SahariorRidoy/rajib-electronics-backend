@@ -26,6 +26,11 @@ export interface PaystationSettings {
   isLive: boolean;
 }
 
+export interface TiktokPixelSettings {
+  pixelId: string;
+  isEnabled: boolean;
+}
+
 export interface SiteSettingsDoc extends mongoose.Document {
   logos: LogoEntry[];
   siteName: string;
@@ -33,6 +38,7 @@ export interface SiteSettingsDoc extends mongoose.Document {
   contactInfo: ContactInfo;
   socialLinks: SocialLinkEntry[];
   paystationSettings: PaystationSettings;
+  tiktokPixel: TiktokPixelSettings;
 }
 
 const LogoSchema = new Schema<LogoEntry>(
@@ -68,6 +74,10 @@ const SiteSettingsSchema = new Schema<SiteSettingsDoc>(
       password: { type: String, default: "" },
       baseUrl: { type: String, default: "https://sandbox.paystation.com.bd" },
       isLive: { type: Boolean, default: false },
+    },
+    tiktokPixel: {
+      pixelId: { type: String, default: "" },
+      isEnabled: { type: Boolean, default: false },
     },
   },
   { timestamps: true }

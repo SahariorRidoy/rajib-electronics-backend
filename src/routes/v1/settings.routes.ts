@@ -31,4 +31,16 @@ router.get("/settings", async (_req, res, next) => {
   }
 });
 
+// GET /settings/tiktok-pixel — public endpoint for frontend pixel injection
+router.get("/settings/tiktok-pixel", async (_req, res, next) => {
+  try {
+    await dbConnect();
+    const settings = await SiteSettings.findOne().lean() as any;
+    const pixel = settings?.tiktokPixel ?? { pixelId: "", isEnabled: false };
+    res.json({ ok: true, data: pixel });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
