@@ -229,23 +229,58 @@ router.get("/orders", async (req, res) => {
             .limit(limit)
             .lean();
         const total = await Order.countDocuments(filter);
-        const formatted = items.map((o) => ({
-            ...o,
-            _id: String(o._id),
-            lines: Array.isArray(o.lines)
-                ? o.lines.map((line) => ({
-                    ...line,
-                    productId: line.productId ? String(line.productId) : line.productId,
-                }))
-                : [],
-            totals: o.totals || { subTotal: 0, shipping: 0, grandTotal: 0 },
-            codAmount: (() => {
-                const isPaid = o.payment?.status === "PAID";
-                if (!isPaid)
-                    return o.totals?.grandTotal ?? 0;
-                return o.deliveryChargePaid ? (o.totals?.subTotal ?? 0) : (o.totals?.shipping ?? 0);
-            })(),
-        }));
+        // Build customer flags: sameDay duplicate & returning customer
+        const phones = [...new Set(items.map((o) => o.customer?.phone).filter(Boolean))];
+        // For each phone, get all orders (outside current page) to detect flags
+        const allOrdersForPhones = phones.length
+            ? await Order
+                .find({ "customer.phone": { $in: phones } })
+                .select("_id customer.phone createdAt status")
+                .lean()
+            : [];
+        // Group by phone
+        const ordersByPhone = {};
+        for (const o of allOrdersForPhones) {
+            const p = o.customer?.phone;
+            if (!p)
+                continue;
+            if (!ordersByPhone[p])
+                ordersByPhone[p] = [];
+            ordersByPhone[p].push(o);
+        }
+        const formatted = items.map((o) => {
+            const phone = o.customer?.phone;
+            const allForPhone = phone ? (ordersByPhone[phone] ?? []) : [];
+            const oDate = new Date(o.createdAt);
+            const oDayStart = new Date(oDate.getFullYear(), oDate.getMonth(), oDate.getDate()).getTime();
+            const oDayEnd = oDayStart + 86400000;
+            // sameDay: another order from same phone on same calendar day (excluding itself)
+            const sameDay = allForPhone.some((x) => String(x._id) !== String(o._id) &&
+                new Date(x.createdAt).getTime() >= oDayStart &&
+                new Date(x.createdAt).getTime() < oDayEnd);
+            // returning: has a prior order (createdAt < this order) that is not CANCELLED
+            const returning = allForPhone.some((x) => String(x._id) !== String(o._id) &&
+                new Date(x.createdAt).getTime() < oDate.getTime() &&
+                x.status !== "CANCELLED");
+            return {
+                ...o,
+                _id: String(o._id),
+                lines: Array.isArray(o.lines)
+                    ? o.lines.map((line) => ({
+                        ...line,
+                        productId: line.productId ? String(line.productId) : line.productId,
+                    }))
+                    : [],
+                totals: o.totals || { subTotal: 0, shipping: 0, grandTotal: 0 },
+                codAmount: (() => {
+                    const isPaid = o.payment?.status === "PAID";
+                    if (!isPaid)
+                        return o.totals?.grandTotal ?? 0;
+                    return o.deliveryChargePaid ? (o.totals?.subTotal ?? 0) : (o.totals?.shipping ?? 0);
+                })(),
+                customerFlags: { sameDay, returning },
+            };
+        });
         return res.json({
             ok: true,
             data: {
@@ -293,6 +328,31 @@ router.get("/debug/recent-orders", async (req, res) => {
     catch (error) {
         console.error("Debug recent orders error:", error);
         return res.status(500).json({ ok: false, message: "Debug failed" });
+    }
+});
+/** GET /orders/by-phone/:phone — all orders for a phone number (admin use) */
+router.get("/orders/by-phone/:phone", async (req, res) => {
+    try {
+        await dbConnect();
+        const { phone } = req.params;
+        const orders = await Order
+            .find({ "customer.phone": phone })
+            .select("_id customer.name status totals lines createdAt")
+            .sort({ createdAt: -1 })
+            .lean();
+        const formatted = orders.map((o) => ({
+            _id: String(o._id),
+            customerName: o.customer?.name,
+            status: o.status,
+            grandTotal: o.totals?.grandTotal ?? 0,
+            itemCount: Array.isArray(o.lines) ? o.lines.reduce((s, l) => s + (l.qty ?? 1), 0) : 0,
+            lines: Array.isArray(o.lines) ? o.lines.map((l) => ({ title: l.title, qty: l.qty, price: l.price })) : [],
+            createdAt: o.createdAt,
+        }));
+        return res.json({ ok: true, data: formatted });
+    }
+    catch (err) {
+        return res.status(500).json({ ok: false, message: "Server error" });
     }
 });
 /** PATCH /orders/:id/details — admin edits customer info, item rates, shipping, totals, notes */
