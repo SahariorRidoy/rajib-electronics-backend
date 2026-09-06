@@ -44,6 +44,7 @@ import OrdersRouter from "./routes/v1/order.routes.js";
 import stockRouter from "./routes/v1/stock.routes.js";
 
 import adminCourier from "./routes/v1/admin.courier.routes.js";
+import adminOrders from "./routes/v1/admin.orders.routes.js";
 import invoicePdfRoutes from "./routes/v1/invoicePdf.routes.js";
 import reviewRoutes from "./routes/v1/review.routes.js";
 import adminReviewRoutes from "./routes/v1/admin.review.routes.js";
@@ -157,6 +158,7 @@ app.use("/api/v1/admin", adminCustomers);
 app.use("/api/v1/admin", adminReturns);
 app.use("/api/v1/admin", adminDelivery);
 app.use("/api/v1/admin", adminCourier);
+app.use("/api/v1/admin", adminOrders);
 app.use("/api/v1/admin", adminSettings);
 app.use("/api/v1", delivery);
 app.use("/api/v1/promocard", promoRouter);
