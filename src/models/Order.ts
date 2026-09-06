@@ -33,6 +33,7 @@ export interface IOrderDocument extends Document {
   adminNotes?: Array<{ text: string; createdAt: Date }>;
   deliveryZone?: "inside" | "outside";
   idempotencyKey?: string;
+  deliveryChargePaid?: boolean;
   courier?: {
     provider: "steadfast" | "pathao";
     consignmentId: string;
@@ -93,6 +94,7 @@ const OrderSchema = new Schema<IOrderDocument>(
     ],
     deliveryZone: { type: String, enum: ["inside", "outside"], default: "outside" },
     idempotencyKey: { type: String, index: { unique: true, sparse: true } },
+    deliveryChargePaid: { type: Boolean, default: false },
     courier: {
       provider: { type: String, enum: ["steadfast", "pathao"] },
       consignmentId: { type: String },

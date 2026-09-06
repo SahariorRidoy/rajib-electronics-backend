@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IPendingPayment extends Document {
   invoiceNumber: string;
   orderPayload: any;
+  deliveryChargePaid: boolean;
   createdAt: Date;
 }
 
@@ -10,6 +11,7 @@ const PendingPaymentSchema = new Schema<IPendingPayment>(
   {
     invoiceNumber: { type: String, required: true, unique: true },
     orderPayload: { type: Schema.Types.Mixed, required: true },
+    deliveryChargePaid: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

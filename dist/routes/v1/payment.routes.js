@@ -6,6 +6,7 @@ import { Product } from "../../models/Product.js";
 import { Customer } from "../../models/Customer.js";
 import { PendingPayment } from "../../models/PendingPayment.js";
 import { SiteSettings } from "../../models/SiteSettings.js";
+import { DeliverySettings } from "../../models/DeliverySettings.js";
 import { env } from "../../env.js";
 const router = Router();
 async function getPaystationConfig() {
@@ -18,7 +19,7 @@ async function getPaystationConfig() {
     };
 }
 /** Creates a real order from a pending payment payload (same logic as order.routes.ts) */
-async function createOrderFromPayload(payload, paymentInfo) {
+async function createOrderFromPayload(payload, paymentInfo, deliveryChargePaid) {
     const items = Array.isArray(payload.items) ? payload.items : [];
     const normalized = items.map((it) => ({
         _id: String(it._id ?? it.productId),
@@ -82,6 +83,7 @@ async function createOrderFromPayload(payload, paymentInfo) {
             payerMobile: paymentInfo.payer_mobile_no || "",
         },
         deliveryZone: payload.deliveryZone === "inside" ? "inside" : "outside",
+        deliveryChargePaid,
     });
     try {
         const { NotificationService } = await import("../../services/notification.service.js");
@@ -103,6 +105,9 @@ router.post("/payment/initiate", async (req, res) => {
         }
         const invoiceNumber = `RE-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
         const callbackUrl = `${env.BACKEND_URL}/api/v1/payment/callback`;
+        // Snapshot delivery charge setting NOW — before admin can change it
+        const deliveryConfig = await DeliverySettings.findOne().lean();
+        const deliveryChargePaid = !!(deliveryConfig?.deliveryChargePaymentRequired);
         const { merchantId, password, baseUrl } = await getPaystationConfig();
         const formData = new URLSearchParams();
         formData.append("merchantId", merchantId);
@@ -128,7 +133,7 @@ router.post("/payment/initiate", async (req, res) => {
             return res.status(400).json({ ok: false, message: data.message || "Payment initiation failed", data });
         }
         // Save cart/order data temporarily — no order created yet
-        await PendingPayment.create({ invoiceNumber, orderPayload });
+        await PendingPayment.create({ invoiceNumber, orderPayload, deliveryChargePaid });
         return res.json({ ok: true, paymentUrl: data.payment_url, invoiceNumber });
     }
     catch (err) {
@@ -155,6 +160,8 @@ async function handleCallback(req, res) {
         }
         const isSuccess = ["success", "Success", "SUCCESS", "Successful", "SUCCESSFUL"].includes(status);
         if (isSuccess) {
+            // Read the snapshotted delivery charge flag — set at initiation time
+            const deliveryChargePaid = !!pending.deliveryChargePaid;
             // Create the real order now that payment is confirmed
             const order = await createOrderFromPayload(pending.orderPayload, {
                 method: payment_method || "ONLINE",
@@ -162,7 +169,7 @@ async function handleCallback(req, res) {
                 invoice_number,
                 payment_amount,
                 payer_mobile_no,
-            });
+            }, deliveryChargePaid);
             // Clean up pending record
             await PendingPayment.deleteOne({ invoiceNumber: invoice_number });
             return res.redirect(`${frontendUrl}/payment/success?orderId=${order._id}&invoice=${invoice_number}&trxId=${trx_id || ""}&amount=${payment_amount || ""}`);

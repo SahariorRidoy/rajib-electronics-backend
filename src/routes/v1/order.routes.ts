@@ -265,12 +265,17 @@ router.get("/orders", async (req, res) => {
       ...o,
       _id: String(o._id),
       lines: Array.isArray(o.lines)
-        ? o.lines.map((line) => ({
+        ? o.lines.map((line: any) => ({
             ...line,
             productId: line.productId ? String(line.productId) : line.productId,
           }))
         : [],
       totals: o.totals || { subTotal: 0, shipping: 0, grandTotal: 0 },
+      codAmount: (() => {
+        const isPaid = o.payment?.status === "PAID";
+        if (!isPaid) return o.totals?.grandTotal ?? 0;
+        return o.deliveryChargePaid ? (o.totals?.subTotal ?? 0) : (o.totals?.shipping ?? 0);
+      })(),
     }));
 
     return res.json({
@@ -666,6 +671,13 @@ router.get("/orders/:id", async (req, res) => {
             productId: l.productId ? String(l.productId) : l.productId,
           }))
         : [],
+      codAmount: (() => {
+        const isPaid = (order as any).payment?.status === "PAID";
+        if (!isPaid) return (order as any).totals?.grandTotal ?? 0;
+        return (order as any).deliveryChargePaid
+          ? ((order as any).totals?.subTotal ?? 0)
+          : ((order as any).totals?.shipping ?? 0);
+      })(),
     };
     return res.json({ ok: true, data: formatted });
   } catch (err) {

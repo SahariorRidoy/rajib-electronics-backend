@@ -21,13 +21,18 @@ router.get("/courier/steadfast/balance", async (req, res, next) => {
 router.post("/courier/steadfast/send/:orderId", async (req, res, next) => {
     try {
         await dbConnect();
-        const order = await Order.findById(req.params.orderId);
+        const order = await Order.findById(req.params.orderId).lean();
         if (!order)
             return res.status(404).json({ ok: false, code: "ORDER_NOT_FOUND" });
         if (order.courier?.consignmentId) {
             return res.status(400).json({ ok: false, code: "ALREADY_SENT", data: order.courier });
         }
         const { note } = z.object({ note: z.string().optional() }).parse(req.body);
+        const isPaid = order.payment?.status === "PAID";
+        const deliveryChargePaid = !!order.deliveryChargePaid;
+        const codAmount = isPaid
+            ? (deliveryChargePaid ? order.totals.subTotal : order.totals.shipping)
+            : order.totals.grandTotal;
         let result;
         try {
             result = await steadfastCreateConsignment({
@@ -35,7 +40,7 @@ router.post("/courier/steadfast/send/:orderId", async (req, res, next) => {
                 recipient_name: order.customer.name,
                 recipient_phone: order.customer.phone,
                 recipient_address: order.customer.address || "N/A",
-                cod_amount: order.totals.grandTotal,
+                cod_amount: codAmount,
                 note: note || undefined,
                 item_description: order.lines.map((l) => `${l.title} x${l.qty}`).join(", "),
             });
@@ -55,15 +60,16 @@ router.post("/courier/steadfast/send/:orderId", async (req, res, next) => {
             });
         }
         const c = result.consignment;
-        order.courier = {
-            provider: "steadfast",
-            consignmentId: String(c.consignment_id),
-            trackingCode: c.tracking_code,
-            status: c.status,
-            sentAt: new Date(),
-        };
-        order.status = "IN_SHIPPING";
-        await order.save();
+        await Order.findByIdAndUpdate(order._id, {
+            courier: {
+                provider: "steadfast",
+                consignmentId: String(c.consignment_id),
+                trackingCode: c.tracking_code,
+                status: c.status,
+                sentAt: new Date(),
+            },
+            status: "IN_SHIPPING",
+        });
         res.json({ ok: true, data: c });
     }
     catch (err) {
@@ -88,12 +94,17 @@ router.post("/courier/steadfast/bulk-send", async (req, res, next) => {
                 .map((l) => `${(l.title || "Item").substring(0, 100)} x${l.qty || 1}`)
                 .join(", ")
                 .substring(0, 500);
+            const oIsPaid = o.payment?.status === "PAID";
+            const oDeliveryChargePaid = !!o.deliveryChargePaid;
+            const oCodAmount = oIsPaid
+                ? (oDeliveryChargePaid ? o.totals.subTotal : o.totals.shipping)
+                : o.totals.grandTotal;
             return {
                 invoice,
                 recipient_name: o.customer.name,
                 recipient_phone: o.customer.phone,
                 recipient_address: o.customer.address || "N/A",
-                cod_amount: o.totals.grandTotal,
+                cod_amount: oCodAmount,
                 note: "",
                 item_description: itemDesc || "Product",
             };
@@ -378,13 +389,18 @@ const PathaoSendSchema = z.object({
 router.post("/courier/pathao/send/:orderId", async (req, res, next) => {
     try {
         await dbConnect();
-        const order = await Order.findById(req.params.orderId);
+        const order = await Order.findById(req.params.orderId).lean();
         if (!order)
             return res.status(404).json({ ok: false, code: "ORDER_NOT_FOUND" });
         if (order.courier?.consignmentId) {
             return res.status(400).json({ ok: false, code: "ALREADY_SENT", data: order.courier });
         }
         const body = PathaoSendSchema.parse(req.body);
+        const isPaid = order.payment?.status === "PAID";
+        const deliveryChargePaid = !!order.deliveryChargePaid;
+        const amountToCollect = isPaid
+            ? (deliveryChargePaid ? order.totals.subTotal : order.totals.shipping)
+            : order.totals.grandTotal;
         const result = await pathaoCreateOrder({
             store_id: body.store_id,
             recipient_city: body.recipient_city,
@@ -400,20 +416,21 @@ router.post("/courier/pathao/send/:orderId", async (req, res, next) => {
             recipient_phone: order.customer.phone,
             recipient_address: order.customer.address || "N/A",
             item_quantity: order.lines.reduce((s, l) => s + l.qty, 0),
-            amount_to_collect: order.totals.grandTotal,
+            amount_to_collect: amountToCollect,
         });
         if (!result?.data?.consignment_id) {
             return res.status(400).json({ ok: false, data: result });
         }
-        order.courier = {
-            provider: "pathao",
-            consignmentId: String(result.data.consignment_id),
-            trackingCode: String(result.data.consignment_id),
-            status: result.data.order_status,
-            sentAt: new Date(),
-        };
-        order.status = "IN_SHIPPING";
-        await order.save();
+        await Order.findByIdAndUpdate(order._id, {
+            courier: {
+                provider: "pathao",
+                consignmentId: String(result.data.consignment_id),
+                trackingCode: String(result.data.consignment_id),
+                status: result.data.order_status,
+                sentAt: new Date(),
+            },
+            status: "IN_SHIPPING",
+        });
         res.json({ ok: true, data: result });
     }
     catch (err) {
@@ -467,7 +484,13 @@ router.post("/courier/pathao/bulk-send", async (req, res, next) => {
                 item_type: p.item_type,
                 item_weight: String(p.item_weight ?? 0.5),
                 item_quantity: o.lines.reduce((s, l) => s + l.qty, 0),
-                amount_to_collect: o.totals.grandTotal,
+                amount_to_collect: (() => {
+                    const pIsPaid = o.payment?.status === "PAID";
+                    const pDeliveryChargePaid = !!o.deliveryChargePaid;
+                    return pIsPaid
+                        ? (pDeliveryChargePaid ? o.totals.subTotal : o.totals.shipping)
+                        : o.totals.grandTotal;
+                })(),
                 special_instruction: p.special_instruction,
                 item_description: p.item_description,
             };
@@ -482,7 +505,7 @@ router.post("/courier/pathao/bulk-send", async (req, res, next) => {
 router.post("/courier/pathao/cancel/:orderId", async (req, res, next) => {
     try {
         await dbConnect();
-        const order = await Order.findById(req.params.orderId);
+        const order = await Order.findById(req.params.orderId).lean();
         if (!order?.courier?.consignmentId) {
             return res.status(404).json({ ok: false, code: "NO_CONSIGNMENT" });
         }
@@ -490,8 +513,7 @@ router.post("/courier/pathao/cancel/:orderId", async (req, res, next) => {
             return res.status(400).json({ ok: false, code: "NOT_PATHAO_ORDER" });
         }
         const data = await pathaoCancelOrder(order.courier.consignmentId);
-        order.courier.status = "Cancelled";
-        await order.save();
+        await Order.findByIdAndUpdate(order._id, { "courier.status": "Cancelled" });
         res.json({ ok: true, data });
     }
     catch (err) {
@@ -503,10 +525,16 @@ router.post("/courier/pathao/cancel/:orderId", async (req, res, next) => {
 router.get("/courier/order/:orderId", async (req, res, next) => {
     try {
         await dbConnect();
-        const order = await Order.findById(req.params.orderId).select("courier status customer totals").lean();
+        const order = await Order.findById(req.params.orderId).select("courier status customer totals payment deliveryChargePaid").lean();
         if (!order)
             return res.status(404).json({ ok: false, code: "ORDER_NOT_FOUND" });
-        res.json({ ok: true, data: order });
+        const codAmount = (() => {
+            const isPaid = order.payment?.status === "PAID";
+            if (!isPaid)
+                return order.totals?.grandTotal ?? 0;
+            return order.deliveryChargePaid ? (order.totals?.subTotal ?? 0) : (order.totals?.shipping ?? 0);
+        })();
+        res.json({ ok: true, data: { ...order, codAmount } });
     }
     catch (err) {
         next(err);
@@ -522,10 +550,19 @@ router.get("/courier/shipments", async (req, res, next) => {
             filter["courier.provider"] = provider;
         const skip = (Number(page) - 1) * Number(limit);
         const [items, total] = await Promise.all([
-            Order.find(filter).sort({ "courier.sentAt": -1 }).skip(skip).limit(Number(limit)).select("courier status customer totals lines").lean(),
+            Order.find(filter).sort({ "courier.sentAt": -1 }).skip(skip).limit(Number(limit)).select("courier status customer totals lines payment deliveryChargePaid").lean(),
             Order.countDocuments(filter),
         ]);
-        res.json({ ok: true, data: { items, total, page: Number(page), limit: Number(limit) } });
+        const formatted = items.map((o) => ({
+            ...o,
+            codAmount: (() => {
+                const isPaid = o.payment?.status === "PAID";
+                if (!isPaid)
+                    return o.totals?.grandTotal ?? 0;
+                return o.deliveryChargePaid ? (o.totals?.subTotal ?? 0) : (o.totals?.shipping ?? 0);
+            })(),
+        }));
+        res.json({ ok: true, data: { items: formatted, total, page: Number(page), limit: Number(limit) } });
     }
     catch (err) {
         next(err);
