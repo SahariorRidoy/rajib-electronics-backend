@@ -231,11 +231,11 @@ router.get("/orders", async (req, res) => {
         const total = await Order.countDocuments(filter);
         // Build customer flags: sameDay duplicate & returning customer
         const phones = [...new Set(items.map((o) => o.customer?.phone).filter(Boolean))];
-        // For each phone, get all orders (outside current page) to detect flags
+        // For each phone, get all orders to detect flags
         const allOrdersForPhones = phones.length
             ? await Order
                 .find({ "customer.phone": { $in: phones } })
-                .select("_id customer.phone createdAt status")
+                .select("_id customer createdAt status")
                 .lean()
             : [];
         // Group by phone
@@ -256,12 +256,11 @@ router.get("/orders", async (req, res) => {
             const oDayEnd = oDayStart + 86400000;
             // sameDay: another order from same phone on same calendar day (excluding itself)
             const sameDay = allForPhone.some((x) => String(x._id) !== String(o._id) &&
+                x.createdAt &&
                 new Date(x.createdAt).getTime() >= oDayStart &&
                 new Date(x.createdAt).getTime() < oDayEnd);
-            // returning: has a prior order (createdAt < this order) that is not CANCELLED
-            const returning = allForPhone.some((x) => String(x._id) !== String(o._id) &&
-                new Date(x.createdAt).getTime() < oDate.getTime() &&
-                x.status !== "CANCELLED");
+            // returning: has any other order from same phone (regardless of status)
+            const returning = allForPhone.some((x) => String(x._id) !== String(o._id));
             return {
                 ...o,
                 _id: String(o._id),
