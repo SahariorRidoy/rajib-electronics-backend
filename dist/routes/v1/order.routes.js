@@ -6,6 +6,7 @@ import { Product } from "../../models/Product.js";
 import { Order } from "../../models/Order.js";
 import { Customer } from "../../models/Customer.js";
 import { OrderEditLog } from "../../models/OrderEditLog.js";
+import { FlashSale } from "../../models/FlashSale.js";
 const router = Router();
 /**
  * POST /api/v1/orders
@@ -48,6 +49,38 @@ router.post("/orders", async (req, res) => {
                 code: "INVALID_ITEMS",
                 errors: invalid,
             });
+        }
+        // ── Flash sale price resolution ──────────────────────────────────────────
+        const now = new Date();
+        const activeFlashSale = await FlashSale.findOne({
+            status: { $ne: "PAUSED" },
+            startAt: { $lte: now },
+            endAt: { $gte: now },
+        }).lean();
+        const flashPriceMap = new Map();
+        const flashSaleQtyMap = new Map();
+        if (activeFlashSale) {
+            for (const item of activeFlashSale.items) {
+                const pid = String(item.productId);
+                flashPriceMap.set(pid, item.salePrice);
+                flashSaleQtyMap.set(pid, { saleQty: item.saleQty, soldQty: item.soldQty });
+            }
+        }
+        // Validate flash sale quantity availability
+        for (const line of normalized) {
+            const flashQty = flashSaleQtyMap.get(line._id);
+            if (flashQty) {
+                const remaining = flashQty.saleQty - flashQty.soldQty;
+                if (remaining < line.quantity) {
+                    return res.status(409).json({
+                        ok: false,
+                        code: "FLASH_SALE_QTY_EXCEEDED",
+                        message: `Flash sale stock exhausted for one or more items`,
+                        productId: line._id,
+                        remaining,
+                    });
+                }
+            }
         }
         // SIMPLIFIED NON-TRANSACTIONAL FLOW
         const updatedProducts = [];
@@ -94,6 +127,7 @@ router.post("/orders", async (req, res) => {
                 _id: String(updated._id),
                 stock: updated.stock ?? updated.availableStock ?? 0,
                 title: updated.title ?? "Unknown Product",
+                flashPrice: flashPriceMap.get(String(updated._id)) ?? null,
             });
         }
         if (outOfStockItems.length > 0) {
@@ -144,7 +178,8 @@ router.post("/orders", async (req, res) => {
                 productId: new mongoose.Types.ObjectId(n._id),
                 qty: n.quantity,
                 title: n.original?.title ?? "Product",
-                price: n.original?.price ?? 0,
+                // Use flash sale price if active for this product — never trust frontend price
+                price: flashPriceMap.get(n._id) ?? n.original?.price ?? 0,
                 image: n.original?.image ?? "",
                 color: n.original?.color ?? "",
             })),
@@ -162,6 +197,14 @@ router.post("/orders", async (req, res) => {
             deliveryZone: req.body.deliveryZone === "inside" ? "inside" : "outside",
         };
         const createdOrder = await Order.create(orderData);
+        // Increment soldQty for flash sale items
+        if (activeFlashSale) {
+            for (const line of normalized) {
+                if (flashPriceMap.has(line._id)) {
+                    await FlashSale.updateOne({ _id: activeFlashSale._id, "items.productId": new mongoose.Types.ObjectId(line._id) }, { $inc: { "items.$.soldQty": line.quantity } });
+                }
+            }
+        }
         // Create order notification
         try {
             const { NotificationService } = await import("../../services/notification.service.js");
